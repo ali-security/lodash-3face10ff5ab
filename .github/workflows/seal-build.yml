@@ -1,0 +1,45 @@
+name: seal-build
+on:
+  workflow_dispatch:
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "12"
+      - name: Generate lodash-es modules with lodash-cli
+        run: |
+          set -eo pipefail
+          node -v; npm -v
+          mkdir -p /tmp/cli
+          cd /tmp/cli
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit "github:lodash/lodash-cli#91176e422d7c10634a59c7e367fe224795ef5a24"
+          LODASH_JS=$(cd node_modules/lodash-cli && node -e "console.log(require.resolve('lodash'))")
+          cp "$GITHUB_WORKSPACE/lodash.js" "$LODASH_JS"
+          # lodash-cli resolves module imports from a hardcoded dependency map. `_.template`
+          # now uses `assignWith` + `arrayEach` (instead of `assignInWith`), so update its
+          # entry or the generated template.js throws `ReferenceError: assignWith is not defined`.
+          MAPPING=/tmp/cli/node_modules/lodash-cli/lib/mapping.js
+          sed -i "s/'template': \['customDefaultsAssignIn', 'assignInWith',/'template': ['customDefaultsAssignIn', 'arrayEach', 'assignWith',/" "$MAPPING"
+          grep -q "'template': \['customDefaultsAssignIn', 'arrayEach', 'assignWith'," "$MAPPING"
+          mkdir -p /tmp/art
+          cd /tmp/art
+          node /tmp/cli/node_modules/lodash-cli/bin/lodash modularize exports=es -o ./
+      - name: Add package files and pack
+        run: |
+          set -eo pipefail
+          cp "$GITHUB_WORKSPACE/LICENSE" /tmp/art/LICENSE
+          cp "$GITHUB_WORKSPACE"/npm-extras/lodash-es/* /tmp/art/
+          cd /tmp/art
+          ls | wc -l
+          npm pack --ignore-scripts
+          ls -l lodash-es-4.17.15.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lodash-es-4.17.15
+          path: /tmp/art/lodash-es-4.17.15.tgz
+          if-no-files-found: error
