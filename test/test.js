@@ -22651,6 +22651,84 @@
 
       assert.deepEqual(actual, ['one', '&quot;two&quot;', 'three']);
     });
+
+    // Related to https://github.com/lodash/lodash/security/advisories/GHSA-xj2r-5m88-79m3
+    QUnit.test('should not execute code via malicious imports key names', function(assert) {
+      assert.expect(2);
+
+      // Default-parameter injection via imports key
+      var executed = false;
+      var key = 'a = (global.templateTest1 = true, 1)';
+      var imports = {};
+      imports[key] = undefined;
+
+      try { _.template('hello', { 'imports': imports }); } catch (e) {}
+      executed = root.templateTest1 === true;
+      delete root.templateTest1;
+
+      assert.strictEqual(executed, false, 'should not execute default-parameter expression in imports key');
+
+      // Same without spaces
+      var executed2 = false;
+      var key2 = 'a=(global.templateTest2=true,1)';
+      var imports2 = {};
+      imports2[key2] = undefined;
+
+      try { _.template('hello', { 'imports': imports2 }); } catch (e) {}
+      executed2 = root.templateTest2 === true;
+      delete root.templateTest2;
+
+      assert.strictEqual(executed2, false, 'should not execute compact default-parameter expression in imports key');
+    });
+
+    // Related to https://github.com/lodash/lodash/security/advisories/GHSA-xj2r-5m88-79m3
+    QUnit.test('should not enumerate inherited keys from imports sources', function(assert) {
+      assert.expect(1);
+
+      // Simulate prototype pollution: inherited key with code injection
+      var executed = false;
+      var payload = 'a = (global.templateTest3 = true, 1)';
+      var proto = {};
+      proto[payload] = undefined;
+      var polluted = Object.create(proto);
+      polluted._ = _;
+
+      try { _.template('hello', { 'imports': polluted }); } catch (e) {}
+      executed = root.templateTest3 === true;
+      delete root.templateTest3;
+
+      assert.strictEqual(executed, false, 'should not execute code from inherited imports keys');
+    });
+
+    // Related to https://github.com/lodash/lodash/security/advisories/GHSA-xj2r-5m88-79m3
+    QUnit.test('should forbid code injection through the "imports" option key names', function(assert) {
+      assert.expect(1);
+
+      var imports = {};
+      imports['a = (global.templateTest4 = true, 1)'] = undefined;
+
+      assert.raises(function() {
+        _.template('', { 'imports': imports });
+      }, /Invalid `imports` option passed into `_\.template`/);
+
+      delete root.templateTest4;
+    });
+
+    // Related to https://github.com/lodash/lodash/security/advisories/GHSA-xj2r-5m88-79m3
+    QUnit.test('should not use keys from a polluted `Object.prototype` as imports', function(assert) {
+      assert.expect(1);
+
+      var payload = 'a = (global.templateTest5 = true, 1)';
+      objectProto[payload] = undefined;
+
+      try { _.template('hello'); } catch (e) {}
+      delete objectProto[payload];
+
+      var executed = root.templateTest5 === true;
+      delete root.templateTest5;
+
+      assert.strictEqual(executed, false, 'should not execute code from polluted `Object.prototype` keys');
+    });
   }());
 
   /*--------------------------------------------------------------------------*/
