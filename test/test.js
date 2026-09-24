@@ -20286,6 +20286,21 @@
         assert.ok(pass);
       });
     });
+
+    QUnit.test('`_.' + methodName + '` should not pollute `Object.prototype`', function(assert) {
+      assert.expect(4);
+
+      var paths = ['__proto__.a', 'constructor.prototype.a', ['__proto__', 'a'], ['constructor', 'prototype', 'a']];
+
+      lodashStable.each(paths, function(path) {
+        func({}, path, updater);
+
+        var actual = 'a' in objectProto;
+        delete objectProto.a;
+
+        assert.notOk(actual);
+      });
+    });
   });
 
   /*--------------------------------------------------------------------------*/
@@ -25779,6 +25794,54 @@
       else {
         skipAssert(assert);
       }
+    });
+  });
+
+  // zipObjectDeep prototype pollution
+  lodashStable.each(['__proto__', 'constructor', 'prototype'], function(keyToTest) {
+    QUnit.test('zipObjectDeep is not setting ' + keyToTest + ' on global', function(assert) {
+      assert.expect(1);
+
+      _.zipObjectDeep([keyToTest + '.a'], ['newValue']);
+      // Can't access plain `a` as it's not defined and test fails
+      assert.notEqual(root.a, 'newValue');
+    });
+
+    QUnit.test('zipObjectDeep is not overwriting ' + keyToTest + ' on vars', function(assert) {
+      assert.expect(3);
+
+      var b = 'oldValue';
+      _.zipObjectDeep([keyToTest + '.b'], ['newValue']);
+      assert.equal(b, 'oldValue');
+      assert.notEqual(root.b, 'newValue');
+
+      // ensure nothing was created
+      assert.notOk(root.b);
+    });
+
+    QUnit.test('zipObjectDeep is not overwriting global.' + keyToTest, function(assert) {
+      assert.expect(2);
+
+      _.zipObjectDeep([root + '.' + keyToTest + '.c'], ['newValue']);
+      assert.notEqual(root.c, 'newValue');
+
+      // ensure nothing was created
+      assert.notOk(root.c);
+    });
+  });
+
+  QUnit.test('zipObjectDeep should not pollute `Object.prototype`', function(assert) {
+    assert.expect(4);
+
+    var paths = ['__proto__.d', 'constructor.prototype.d', ['__proto__', 'd'], ['constructor', 'prototype', 'd']];
+
+    lodashStable.each(paths, function(path) {
+      _.zipObjectDeep([path], ['newValue']);
+
+      var actual = 'd' in objectProto;
+      delete objectProto.d;
+
+      assert.notOk(actual);
     });
   });
 
